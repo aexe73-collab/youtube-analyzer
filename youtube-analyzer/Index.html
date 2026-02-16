@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Insights Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 min-h-screen text-white">
+    <div id="root"></div>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="text/babel">
+        const { useState } = React;
+
+        function App() {
+            const [mode, setMode] = useState('search');
+            const [links, setLinks] = useState(['', '', '', '', '']);
+            const [topic, setTopic] = useState('');
+            const [count, setCount] = useState(2);
+            const [results, setResults] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+
+            const analyzeLinks = async () => {
+                const valid = links.filter(l => l.trim());
+                if (valid.length === 0) {
+                    setError('Enter at least one link');
+                    return;
+                }
+
+                setError('');
+                setResults('');
+                setLoading(true);
+
+                try {
+                    const transcripts = valid.map((l, i) => 
+                        `VIDEO ${i+1}: ${l}\n\nDemo transcript...`
+                    ).join('\n\n---\n\n');
+
+                    const prompt = `Analyze these ${valid.length} video(s):\n\n${transcripts}`;
+
+                    const response = await fetch('/api/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messages: [{ role: 'user', content: prompt }]
+                        })
+                    });
+
+                    const data = await response.json();
+                    setResults(data.content[0]?.text || 'Error');
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const searchAndAnalyze = async () => {
+                if (!topic.trim()) {
+                    setError('Enter a topic');
+                    return;
+                }
+
+                setError('');
+                setResults('');
+                setLoading(true);
+
+                try {
+                    const mockData = {
+                        'trading psychology': ['Mark Douglas', 'Daily Routine', 'FOMO Trading'],
+                        'avaloq migration': ['Best Practices', 'RBC Case Study', 'Avaloq vs FNZ']
+                    };
+
+                    const videos = (mockData[topic.toLowerCase()] || ['Video 1', 'Video 2']).slice(0, count);
+                    const transcripts = videos.map((v, i) => `VIDEO ${i+1}: ${v}\n\nInsights...`).join('\n\n');
+                    const prompt = `Analyze ${count} videos on "${topic}":\n\n${transcripts}`;
+
+                    const response = await fetch('/api/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messages: [{ role: 'user', content: prompt }]
+                        })
+                    });
+
+                    const data = await response.json();
+                    setResults(data.content[0]?.text || 'Error');
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen p-8">
+                    <div className="max-w-5xl mx-auto">
+                        <h1 className="text-5xl font-bold text-center mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                            YouTube Insights Analyzer
+                        </h1>
+
+                        <div className="flex gap-4 mb-8">
+                            <button onClick={() => setMode('links')}
+                                className={`flex-1 py-4 px-6 rounded-xl font-semibold ${
+                                    mode === 'links' ? 'bg-gradient-to-r from-purple-600 to-pink-600' : 'bg-slate-800/50'
+                                }`}>
+                                🔗 Paste Links
+                            </button>
+                            <button onClick={() => setMode('search')}
+                                className={`flex-1 py-4 px-6 rounded-xl font-semibold ${
+                                    mode === 'search' ? 'bg-gradient-to-r from-purple-600 to-pink-600' : 'bg-slate-800/50'
+                                }`}>
+                                🔍 Search Topic
+                            </button>
+                        </div>
+
+                        {mode === 'links' && (
+                            <div className="bg-slate-800/50 rounded-2xl p-8 mb-8">
+                                {links.map((l, i) => (
+                                    <div key={i} className="flex gap-3 mb-3">
+                                        <span className="text-purple-400 w-8">{i+1}.</span>
+                                        <input type="text" value={l} 
+                                            onChange={e => setLinks(links.map((link, idx) => idx === i ? e.target.value : link))}
+                                            placeholder="YouTube URL"
+                                            className="flex-1 px-4 py-3 bg-slate-900/50 rounded-lg text-white" />
+                                    </div>
+                                ))}
+                                <button onClick={analyzeLinks} disabled={loading}
+                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-lg font-semibold mt-4">
+                                    Analyze
+                                </button>
+                            </div>
+                        )}
+
+                        {mode === 'search' && (
+                            <div className="bg-slate-800/50 rounded-2xl p-8 mb-8">
+                                <input type="text" value={topic} onChange={e => setTopic(e.target.value)}
+                                    placeholder="e.g., 'trading psychology'"
+                                    className="w-full px-4 py-3 bg-slate-900/50 rounded-lg text-white mb-4" />
+                                <div className="flex gap-3 mb-4">
+                                    {[1,2,3].map(n => (
+                                        <button key={n} onClick={() => setCount(n)}
+                                            className={`flex-1 py-3 rounded-lg ${count === n ? 'bg-purple-600' : 'bg-slate-700/50'}`}>
+                                            {n} video{n > 1 ? 's' : ''}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button onClick={searchAndAnalyze} disabled={loading}
+                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-4 rounded-lg font-semibold">
+                                    Analyze
+                                </button>
+                            </div>
+                        )}
+
+                        {loading && <div className="bg-slate-800/50 rounded-2xl p-8 text-center">Analyzing...</div>}
+                        {error && <div className="bg-red-900/30 rounded-2xl p-6">{error}</div>}
+                        {results && (
+                            <div className="bg-slate-800/50 rounded-2xl p-8">
+                                <pre className="whitespace-pre-wrap text-sm">{results}</pre>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
