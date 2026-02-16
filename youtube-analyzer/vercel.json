@@ -1,0 +1,5 @@
+{
+  "version": 2,
+  "buildCommand": "mkdir -p .vercel/output/static && cp -r public/* .vercel/output/static/",
+  "outputDirectory": ".vercel/output/static"
+}
