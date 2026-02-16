@@ -53,7 +53,13 @@
                     });
 
                     const data = await response.json();
-                    setResults(data.content[0]?.text || 'Error analyzing videos');
+if (data.error) {
+    throw new Error(data.error.message || data.error);
+}
+if (!data.content || !data.content[0]) {
+    throw new Error('Invalid API response: ' + JSON.stringify(data));
+}
+setResults(data.content[0].text);
                 } catch (err) {
                     setError(err.message);
                 } finally {
@@ -107,7 +113,13 @@
                     });
 
                     const data = await response.json();
-                    setResults(data.content[0]?.text || 'Error analyzing videos');
+if (data.error) {
+    throw new Error(data.error.message || data.error);
+}
+if (!data.content || !data.content[0]) {
+    throw new Error('Invalid API response: ' + JSON.stringify(data));
+}
+setResults(data.content[0].text);
                 } catch (err) {
                     setError(err.message);
                 } finally {
