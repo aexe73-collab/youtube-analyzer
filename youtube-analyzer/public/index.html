@@ -44,7 +44,7 @@
                         ? `Analyze this YouTube video:\n\n## Key Insights\n## Actionable Takeaways\n## Best Quotes\n\n${transcripts}`
                         : `Compare these ${valid.length} YouTube videos:\n\n## Consensus Views\n## Unique Perspectives\n## Comparative Analysis\n## Best Practices\n\n${transcripts}`;
 
-                    const response = await fetch('/api/analyze', {
+                    const response = await fetch('/.netlify/functions/analyze', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -98,7 +98,7 @@
                         ? `Analyze this video on "${topic}":\n\n## Key Insights\n## Actionable Takeaways\n\n${transcripts}`
                         : `Compare ${count} videos on "${topic}":\n\n## Consensus Views\n## Unique Perspectives\n## Best Practices\n\n${transcripts}`;
 
-                    const response = await fetch('/api/analyze', {
+                    const response = await fetch('/.netlify/functions/analyze', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
