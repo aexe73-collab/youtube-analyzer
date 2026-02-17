@@ -9,70 +9,85 @@ export default async function handler(req, res) {
 
   try {
     const { videoId } = req.body;
+    const apiKey = process.env.YOUTUBE_API_KEY;
 
     if (!videoId) {
       return res.status(400).json({ error: 'Video ID is required' });
     }
 
-    console.log('Fetching transcript for video:', videoId);
+    if (!apiKey) {
+      return res.status(500).json({ error: 'YouTube API key not configured' });
+    }
 
-    // Try to fetch captions
-    const captionsUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en`;
-    const captionsResponse = await fetch(captionsUrl);
+    console.log('Fetching captions for video:', videoId);
 
-    console.log('Response status:', captionsResponse.status);
-    
-    const captionsXML = await captionsResponse.text();
-    console.log('XML length:', captionsXML.length);
-    console.log('XML preview:', captionsXML.substring(0, 500));
+    // Step 1: Get caption tracks list
+    const captionsListUrl = `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${apiKey}`;
+    const captionsListResponse = await fetch(captionsListUrl);
+    const captionsList = await captionsListResponse.json();
 
-    if (!captionsResponse.ok || captionsXML.includes('<?xml')) {
-      // Try to get available caption tracks first
-      const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      const videoPageResponse = await fetch(videoPageUrl);
-      const videoPageHTML = await videoPageResponse.text();
-      
-      // Look for caption tracks in the page
-      const captionTracksMatch = videoPageHTML.match(/"captionTracks":\[([^\]]+)\]/);
-      
-      if (captionTracksMatch) {
-        console.log('Found caption tracks:', captionTracksMatch[0].substring(0, 200));
-        
-        // Extract the base URL for captions
-        const baseUrlMatch = captionTracksMatch[0].match(/"baseUrl":"([^"]+)"/);
-        
-        if (baseUrlMatch) {
-          const captionUrl = baseUrlMatch[1].replace(/\\u0026/g, '&');
-          console.log('Using caption URL:', captionUrl);
-          
-          const captionResponse = await fetch(captionUrl);
-          const captionXML = await captionResponse.text();
-          
-          const transcript = parseTranscript(captionXML);
-          
-          if (transcript && transcript.length > 50) {
-            return res.status(200).json({ 
-              transcript: transcript,
-              length: transcript.length
-            });
-          }
-        }
-      }
-      
+    if (captionsList.error) {
+      throw new Error(captionsList.error.message || 'Could not access video captions');
+    }
+
+    if (!captionsList.items || captionsList.items.length === 0) {
       throw new Error('No captions available for this video');
     }
 
-    const transcript = parseTranscript(captionsXML);
+    // Find English caption track
+    const englishTrack = captionsList.items.find(
+      item => item.snippet.language === 'en' || item.snippet.language === 'en-US'
+    ) || captionsList.items[0];
 
-    if (!transcript || transcript.length < 50) {
-      throw new Error('Could not extract meaningful transcript from video');
+    const captionId = englishTrack.id;
+
+    // Step 2: Download the caption content
+    const captionDownloadUrl = `https://www.googleapis.com/youtube/v3/captions/${captionId}?tfmt=srt&key=${apiKey}`;
+    const captionResponse = await fetch(captionDownloadUrl, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      }
+    });
+
+    if (!captionResponse.ok) {
+      // API doesn't allow downloading - use alternative method
+      console.log('Direct download failed, trying alternative method...');
+      
+      // Use the timedtext API as fallback
+      const timedTextUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en`;
+      const timedTextResponse = await fetch(timedTextUrl);
+      
+      if (!timedTextResponse.ok) {
+        throw new Error('Could not fetch video transcript');
+      }
+
+      const captionXML = await timedTextResponse.text();
+      const transcript = parseXMLTranscript(captionXML);
+      
+      if (!transcript || transcript.length < 100) {
+        throw new Error('Transcript too short or empty');
+      }
+
+      return res.status(200).json({ 
+        transcript: transcript,
+        length: transcript.length,
+        language: englishTrack.snippet.language
+      });
+    }
+
+    const captionText = await captionResponse.text();
+    const transcript = parseSRTTranscript(captionText);
+
+    if (!transcript || transcript.length < 100) {
+      throw new Error('Could not extract meaningful transcript');
     }
 
     console.log('Transcript fetched successfully, length:', transcript.length);
 
     return res.status(200).json({ 
       transcript: transcript,
-      length: transcript.length
+      length: transcript.length,
+      language: englishTrack.snippet.language
     });
 
   } catch (error) {
@@ -84,8 +99,23 @@ export default async function handler(req, res) {
   }
 }
 
-function parseTranscript(xml) {
-  // Extract text from XML captions
+function parseSRTTranscript(srt) {
+  // Parse SRT format (subtitle format)
+  const lines = srt.split('\n');
+  const transcript = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    // Skip numbers, timestamps, and empty lines
+    if (line && !line.match(/^\d+$/) && !line.match(/^\d{2}:\d{2}:\d{2}/)) {
+      transcript.push(line);
+    }
+  }
+  
+  return transcript.join(' ').trim();
+}
+
+function parseXMLTranscript(xml) {
   const textMatches = xml.match(/<text[^>]*>([^<]+)<\/text>/g) || [];
   
   const transcript = textMatches
