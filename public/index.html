@@ -62,56 +62,63 @@
             };
 
             const analyzeLinks = async () => {
-    const valid = links.filter(l => l.trim());
-    if (valid.length === 0) {
-        setError('Please enter at least one YouTube link');
-        return;
-    }
+                const valid = links.filter(l => l.trim());
+                if (valid.length === 0) {
+                    setError('Please enter at least one YouTube link');
+                    return;
+                }
 
-    setError('');
-    setResults('');
-    setLoading(true);
+                setError('');
+                setResults('');
+                setLoading(true);
 
-    try {
-        const transcripts = [];
+                try {
+                    const transcripts = [];
 
-        for (let i = 0; i < valid.length; i++) {
-            setProgress(`📥 Fetching transcript ${i + 1} of ${valid.length}...`);
-            const videoId = extractVideoId(valid[i]);
-            
-            if (!videoId) {
-                throw new Error(`Invalid YouTube URL: ${valid[i]}\n\nPlease use format: https://youtube.com/watch?v=VIDEO_ID`);
-            }
-            
-            try {
-                const transcript = await fetchTranscript(videoId);
-                transcripts.push({ url: valid[i], videoId, transcript });
-            } catch (transcriptError) {
-                // Provide helpful error for missing captions
-                throw new Error(
-                    `❌ Could not fetch transcript for video ${i + 1}\n\n` +
-                    `Video: ${valid[i]}\n\n` +
-                    `Possible reasons:\n` +
-                    `• Video doesn't have captions/subtitles enabled\n` +
-                    `• Captions are disabled by the creator\n` +
-                    `• Video is age-restricted or private\n\n` +
-                    `✅ How to check:\n` +
-                    `1. Open the video on YouTube\n` +
-                    `2. Look for the CC (closed captions) button\n` +
-                    `3. If there's no CC button or it says "unavailable", this video can't be analyzed\n\n` +
-                    `💡 Try a different video with captions enabled!`
-                );
-            }
-        }
+                    for (let i = 0; i < valid.length; i++) {
+                        setProgress(`📥 Fetching transcript ${i + 1} of ${valid.length}...`);
+                        const videoId = extractVideoId(valid[i]);
+                        
+                        if (!videoId) {
+                            throw new Error(
+                                `❌ Invalid YouTube URL: ${valid[i]}\n\n` +
+                                `Please use format:\n` +
+                                `• https://youtube.com/watch?v=VIDEO_ID\n` +
+                                `• https://youtu.be/VIDEO_ID\n` +
+                                `• VIDEO_ID (11 characters)`
+                            );
+                        }
+                        
+                        try {
+                            const transcript = await fetchTranscript(videoId);
+                            transcripts.push({ url: valid[i], videoId, transcript });
+                        } catch (transcriptError) {
+                            throw new Error(
+                                `❌ Could not fetch transcript for video ${i + 1}\n\n` +
+                                `Video: ${valid[i]}\n\n` +
+                                `Possible reasons:\n` +
+                                `• Video doesn't have captions/subtitles enabled\n` +
+                                `• Captions are disabled by the creator\n` +
+                                `• Video is age-restricted or private\n` +
+                                `• Video has been deleted\n\n` +
+                                `✅ How to check if a video has captions:\n` +
+                                `1. Open the video on YouTube\n` +
+                                `2. Look for the CC (closed captions) button\n` +
+                                `3. Click it - if captions appear, the video can be analyzed\n` +
+                                `4. If there's no CC button or it says "unavailable", try a different video\n\n` +
+                                `💡 Tip: Most professional content creators enable captions on their videos!`
+                            );
+                        }
+                    }
 
-        setProgress('🤖 Analyzing with Claude AI...');
+                    setProgress('🤖 Analyzing with Claude AI...');
 
-        const transcriptText = transcripts.map((t, i) => 
-            `VIDEO ${i + 1}: ${t.url}\n\nTRANSCRIPT:\n${t.transcript}`
-        ).join('\n\n---\n\n');
+                    const transcriptText = transcripts.map((t, i) => 
+                        `VIDEO ${i + 1}: ${t.url}\n\nTRANSCRIPT:\n${t.transcript}`
+                    ).join('\n\n---\n\n');
 
-        const prompt = transcripts.length === 1
-            ? `Analyze this YouTube video transcript and provide:
+                    const prompt = transcripts.length === 1
+                        ? `Analyze this YouTube video transcript and provide:
 
 ## Key Insights
 - Main concepts, strategies and lessons
@@ -128,7 +135,7 @@
 
 TRANSCRIPT:
 ${transcriptText}`
-            : `Compare and synthesize these ${transcripts.length} YouTube videos:
+                        : `Compare and synthesize these ${transcripts.length} YouTube videos:
 
 ## Consensus Views
 - What all videos agree on
@@ -149,16 +156,31 @@ ${transcriptText}`
 TRANSCRIPTS:
 ${transcriptText}`;
 
-        const analysis = await analyzeWithClaude(prompt);
-        setResults(analysis);
+                    const analysis = await analyzeWithClaude(prompt);
+                    setResults(analysis);
 
-    } catch (err) {
-        setError(err.message);
-    } finally {
-        setLoading(false);
-        setProgress('');
-    }
-};
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                    setProgress('');
+                }
+            };
+
+            const searchAndAnalyze = async () => {
+                if (!topic.trim()) {
+                    setError('Please enter a topic or video title');
+                    return;
+                }
+
+                setError('');
+                setResults('');
+                setLoading(true);
+
+                try {
+                    setProgress(`🔍 Analyzing topic: "${topic}"...`);
+
+                    const prompt = `I want to learn about "${topic}". Based on your knowledge, provide a comprehensive analysis as if you had watched ${count} expert videos on this topic:
 
 ## Consensus Views
 - What most experts agree on about ${topic}
@@ -167,22 +189,26 @@ ${transcriptText}`;
 ## Key Insights
 - Most important concepts to understand
 - Critical success factors
+- Common mistakes to avoid
 
 ## Unique Perspectives
 - Different schools of thought
 - Contrasting approaches
+- Innovative ideas in this space
 
 ## Actionable Synthesis
 - Step-by-step best practices
 - What to implement first
+- Quick wins vs long-term strategies
 
 ## Recommended Resources
 - Types of videos/content to look for
 - Key experts or channels to follow
+- Books or courses worth exploring
 
-Please be specific, detailed and practical.`;
+Please be specific, detailed and practical. Focus on actionable insights.`;
 
-                    setProgress('🤖 Analyzing with Claude AI...');
+                    setProgress('🤖 Synthesizing insights with Claude AI...');
                     const analysis = await analyzeWithClaude(prompt);
                     setResults(analysis);
 
@@ -195,46 +221,55 @@ Please be specific, detailed and practical.`;
             };
 
             return (
-                <div className="min-h-screen p-8">
+                <div className="min-h-screen p-4 md:p-8">
                     <div className="max-w-5xl mx-auto">
-                        <h1 className="text-5xl font-bold text-center mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                        <h1 className="text-4xl md:text-5xl font-bold text-center mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                             YouTube Insights Analyzer
                         </h1>
                         <p className="text-center text-gray-300 mb-8">
-                            Paste YouTube links for real transcript analysis
+                            Extract insights from YouTube videos with AI
                         </p>
 
                         <div className="flex gap-4 mb-8">
                             <button onClick={() => setMode('links')}
-                                className={`flex-1 py-4 px-6 rounded-xl font-semibold transition ${
+                                className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${
                                     mode === 'links' 
-                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105' 
-                                    : 'bg-slate-800/50 border border-purple-500/20'
+                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105 shadow-lg' 
+                                    : 'bg-slate-800/50 border border-purple-500/20 hover:border-purple-500/40'
                                 }`}>
                                 <div className="text-3xl mb-2">🔗</div>
-                                <div>Paste YouTube Links</div>
-                                <div className="text-xs text-gray-400 mt-1">Auto-fetches real transcripts (1-5 links)</div>
+                                <div className="font-bold">Paste YouTube Links</div>
+                                <div className="text-xs text-gray-400 mt-1">Auto-fetch transcripts (1-5 links)</div>
                             </button>
                             <button onClick={() => setMode('search')}
-                                className={`flex-1 py-4 px-6 rounded-xl font-semibold transition ${
+                                className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${
                                     mode === 'search' 
-                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105' 
-                                    : 'bg-slate-800/50 border border-purple-500/20'
+                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105 shadow-lg' 
+                                    : 'bg-slate-800/50 border border-purple-500/20 hover:border-purple-500/40'
                                 }`}>
                                 <div className="text-3xl mb-2">🔍</div>
-                                <div>Search by Topic</div>
-                                <div className="text-xs text-gray-400 mt-1">AI knowledge synthesis (1-3 topics)</div>
+                                <div className="font-bold">Search by Topic</div>
+                                <div className="text-xs text-gray-400 mt-1">AI knowledge synthesis</div>
                             </button>
                         </div>
 
                         {mode === 'links' && (
-                            <div className="bg-slate-800/50 rounded-2xl p-8 mb-8 border border-purple-500/20">
+                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 md:p-8 mb-8 border border-purple-500/20">
                                 <h2 className="text-xl font-bold text-purple-300 mb-2">
                                     Paste YouTube Links
                                 </h2>
                                 <p className="text-sm text-gray-400 mb-6">
                                     Enter 1-5 YouTube URLs. Transcripts will be automatically fetched and analyzed.
                                 </p>
+
+                                <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                                    <p className="text-sm text-blue-200 font-semibold mb-2">💡 Important: Videos must have captions</p>
+                                    <p className="text-xs text-gray-300">
+                                        Before analyzing, check that your video has the <strong>CC (closed captions)</strong> button on YouTube.
+                                        Videos without captions cannot be analyzed.
+                                    </p>
+                                </div>
+
                                 {links.map((l, i) => (
                                     <div key={i} className="flex gap-3 mb-3">
                                         <span className="text-purple-400 font-bold w-8 pt-3">{i+1}.</span>
@@ -244,70 +279,109 @@ Please be specific, detailed and practical.`;
                                             className="flex-1 px-4 py-3 bg-slate-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500" />
                                     </div>
                                 ))}
+                                
                                 <button onClick={analyzeLinks} disabled={loading}
-                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold mt-4 transition">
+                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold mt-4 transition-all shadow-lg">
                                     {loading ? 'Analyzing...' : `Analyze ${links.filter(l => l.trim()).length || ''} Video${links.filter(l => l.trim()).length !== 1 ? 's' : ''}`}
                                 </button>
                             </div>
                         )}
 
                         {mode === 'search' && (
-                            <div className="bg-slate-800/50 rounded-2xl p-8 mb-8 border border-purple-500/20">
+                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 md:p-8 mb-8 border border-purple-500/20">
                                 <h2 className="text-xl font-bold text-purple-300 mb-2">
                                     Search by Topic
                                 </h2>
                                 <p className="text-sm text-gray-400 mb-6">
                                     Enter any topic and Claude will synthesize expert knowledge on it.
                                 </p>
+                                
                                 <input type="text" value={topic} onChange={e => setTopic(e.target.value)}
                                     placeholder="e.g., 'trading psychology', 'Avaloq migration', 'startup fundraising'"
-                                    className="w-full px-4 py-3 bg-slate-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                                    className="w-full px-4 py-3 bg-slate-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 mb-6 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                                
                                 <div className="mb-6">
-                                    <label className="block text-sm mb-2 text-purple-300">Depth of analysis</label>
+                                    <label className="block text-sm font-medium mb-3 text-purple-300">Depth of analysis</label>
                                     <div className="flex gap-3">
                                         {[1, 2, 3].map(n => (
                                             <button key={n} onClick={() => setCount(n)}
-                                                className={`flex-1 py-3 rounded-lg font-semibold transition ${
-                                                    count === n ? 'bg-purple-600' : 'bg-slate-700/50 hover:bg-slate-700'
+                                                className={`flex-1 py-3 rounded-lg font-semibold transition-all ${
+                                                    count === n ? 'bg-purple-600 shadow-lg' : 'bg-slate-700/50 hover:bg-slate-700'
                                                 }`}>
                                                 {n === 1 ? 'Quick' : n === 2 ? 'Detailed' : 'Deep Dive'}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
+                                
                                 <button onClick={searchAndAnalyze} disabled={loading}
-                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold transition">
+                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold transition-all shadow-lg">
                                     {loading ? 'Analyzing...' : 'Analyze Topic'}
                                 </button>
                             </div>
                         )}
 
                         {loading && (
-                            <div className="bg-slate-800/50 rounded-2xl p-8 mb-8 text-center border border-purple-500/20">
+                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 mb-8 text-center border border-purple-500/20">
                                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                                <p className="text-purple-300 font-medium">{progress || 'Processing...'}</p>
+                                <p className="text-purple-300 font-medium text-lg">{progress || 'Processing...'}</p>
                             </div>
                         )}
 
                         {error && (
-                            <div className="bg-red-900/30 rounded-2xl p-6 mb-8 border border-red-500/30">
-                                <h3 className="font-semibold text-red-300 mb-2">Error</h3>
-                                <p className="text-red-200">{error}</p>
+                            <div className="bg-red-900/30 backdrop-blur rounded-2xl p-6 mb-8 border border-red-500/30">
+                                <h3 className="font-semibold text-red-300 mb-3 text-lg">⚠️ Error</h3>
+                                <pre className="text-red-200 text-sm whitespace-pre-wrap font-sans">{error}</pre>
                             </div>
                         )}
 
                         {results && (
-                            <div className="bg-slate-800/50 rounded-2xl p-8 border border-purple-500/20">
-                                <div className="flex justify-between mb-6">
-                                    <h2 className="text-2xl font-bold text-purple-300">📊 Analysis Results</h2>
-                                    <button onClick={() => navigator.clipboard.writeText(results)}
-                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm transition">
+                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 md:p-8 border border-purple-500/20">
+                                <div className="flex justify-between items-start mb-6">
+                                    <h2 className="text-2xl md:text-3xl font-bold text-purple-300">📊 Analysis Results</h2>
+                                    <button onClick={() => {
+                                        navigator.clipboard.writeText(results);
+                                        const btn = document.getElementById('copyBtn');
+                                        if (btn) {
+                                            const original = btn.textContent;
+                                            btn.textContent = '✓ Copied!';
+                                            setTimeout(() => btn.textContent = original, 2000);
+                                        }
+                                    }}
+                                    id="copyBtn"
+                                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-all">
                                         Copy Results
                                     </button>
                                 </div>
-                                <pre className="whitespace-pre-wrap text-gray-200 text-sm leading-relaxed">{results}</pre>
+                                <pre className="whitespace-pre-wrap text-gray-200 text-sm md:text-base leading-relaxed font-sans">{results}</pre>
                             </div>
                         )}
+
+                        <div className="grid md:grid-cols-3 gap-6 mt-12">
+                            <div className="bg-slate-800/30 backdrop-blur rounded-xl p-6 border border-purple-500/10">
+                                <div className="text-4xl mb-4">📊</div>
+                                <h3 className="text-xl font-semibold mb-2 text-purple-300">Compare Sources</h3>
+                                <p className="text-gray-400 text-sm">
+                                    Analyze multiple videos to find consensus, contradictions, and unique perspectives.
+                                </p>
+                            </div>
+
+                            <div className="bg-slate-800/30 backdrop-blur rounded-xl p-6 border border-purple-500/10">
+                                <div className="text-4xl mb-4">🎯</div>
+                                <h3 className="text-xl font-semibold mb-2 text-pink-300">Best Practices</h3>
+                                <p className="text-gray-400 text-sm">
+                                    Synthesize insights into actionable strategies combining the best of each source.
+                                </p>
+                            </div>
+
+                            <div className="bg-slate-800/30 backdrop-blur rounded-xl p-6 border border-purple-500/10">
+                                <div className="text-4xl mb-4">⚡</div>
+                                <h3 className="text-xl font-semibold mb-2 text-purple-300">Save Time</h3>
+                                <p className="text-gray-400 text-sm">
+                                    Hours of video content analyzed and synthesized in minutes, not days.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             );
