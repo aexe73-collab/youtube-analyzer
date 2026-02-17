@@ -16,29 +16,52 @@ export default async function handler(req, res) {
 
     console.log('Fetching transcript for video:', videoId);
 
-    // Fetch captions directly from YouTube
+    // Try to fetch captions
     const captionsUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en`;
     const captionsResponse = await fetch(captionsUrl);
 
-    if (!captionsResponse.ok) {
-      // Try alternative languages if English fails
-      const altUrl = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en-US`;
-      const altResponse = await fetch(altUrl);
+    console.log('Response status:', captionsResponse.status);
+    
+    const captionsXML = await captionsResponse.text();
+    console.log('XML length:', captionsXML.length);
+    console.log('XML preview:', captionsXML.substring(0, 500));
+
+    if (!captionsResponse.ok || captionsXML.includes('<?xml')) {
+      // Try to get available caption tracks first
+      const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      const videoPageResponse = await fetch(videoPageUrl);
+      const videoPageHTML = await videoPageResponse.text();
       
-      if (!altResponse.ok) {
-        throw new Error('No captions available for this video');
+      // Look for caption tracks in the page
+      const captionTracksMatch = videoPageHTML.match(/"captionTracks":\[([^\]]+)\]/);
+      
+      if (captionTracksMatch) {
+        console.log('Found caption tracks:', captionTracksMatch[0].substring(0, 200));
+        
+        // Extract the base URL for captions
+        const baseUrlMatch = captionTracksMatch[0].match(/"baseUrl":"([^"]+)"/);
+        
+        if (baseUrlMatch) {
+          const captionUrl = baseUrlMatch[1].replace(/\\u0026/g, '&');
+          console.log('Using caption URL:', captionUrl);
+          
+          const captionResponse = await fetch(captionUrl);
+          const captionXML = await captionResponse.text();
+          
+          const transcript = parseTranscript(captionXML);
+          
+          if (transcript && transcript.length > 50) {
+            return res.status(200).json({ 
+              transcript: transcript,
+              length: transcript.length
+            });
+          }
+        }
       }
       
-      const captionsXML = await altResponse.text();
-      const transcript = parseTranscript(captionsXML);
-      
-      return res.status(200).json({ 
-        transcript: transcript,
-        length: transcript.length
-      });
+      throw new Error('No captions available for this video');
     }
 
-    const captionsXML = await captionsResponse.text();
     const transcript = parseTranscript(captionsXML);
 
     if (!transcript || transcript.length < 50) {
@@ -67,9 +90,7 @@ function parseTranscript(xml) {
   
   const transcript = textMatches
     .map(match => {
-      // Remove XML tags
       let text = match.replace(/<[^>]+>/g, '');
-      // Decode HTML entities
       text = text
         .replace(/&amp;/g, '&')
         .replace(/&#39;/g, "'")
