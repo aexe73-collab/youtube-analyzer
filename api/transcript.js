@@ -1,5 +1,3 @@
-import { Innertube } from 'youtubei.js';
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -16,24 +14,26 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Video ID is required' });
     }
 
-    console.log('Fetching transcript for video:', videoId);
+    console.log('Fetching transcript for:', videoId);
 
-    // Initialize YouTube client
-    const youtube = await Innertube.create();
+    // Call the free transcript API
+    const apiUrl = `https://yt-transcript-api.com/api/transcript?url=https://www.youtube.com/watch?v=${videoId}`;
     
-    // Get video info
-    const info = await youtube.getInfo(videoId);
+    const response = await fetch(apiUrl);
     
-    // Get transcript
-    const transcriptData = await info.getTranscript();
-    
-    if (!transcriptData || !transcriptData.transcript) {
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.transcript || data.transcript.length === 0) {
       throw new Error('No transcript available for this video');
     }
 
-    // Extract text from transcript segments
-    const transcript = transcriptData.transcript.content.body.initial_segments
-      .map(segment => segment.snippet.text)
+    // Combine all transcript segments
+    const transcript = data.transcript
+      .map(item => item.text)
       .join(' ')
       .trim();
 
