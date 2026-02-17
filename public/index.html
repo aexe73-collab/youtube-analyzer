@@ -16,18 +16,55 @@
         const { useState } = React;
 
         function App() {
-            const [mode, setMode] = useState('search');
+            const [mode, setMode] = useState('links');
             const [links, setLinks] = useState(['', '', '', '', '']);
             const [topic, setTopic] = useState('');
             const [count, setCount] = useState(2);
             const [results, setResults] = useState('');
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState('');
+            const [progress, setProgress] = useState('');
+
+            const extractVideoId = (url) => {
+                const patterns = [
+                    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/,
+                    /^([a-zA-Z0-9_-]{11})$/
+                ];
+                for (const pattern of patterns) {
+                    const match = url.match(pattern);
+                    if (match) return match[1];
+                }
+                return null;
+            };
+
+            const fetchTranscript = async (videoId) => {
+                const response = await fetch('/.netlify/functions/transcript', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ videoId })
+                });
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                return data.transcript;
+            };
+
+            const analyzeWithClaude = async (prompt) => {
+                const response = await fetch('/.netlify/functions/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [{ role: 'user', content: prompt }]
+                    })
+                });
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+                return data.content[0].text;
+            };
 
             const analyzeLinks = async () => {
                 const valid = links.filter(l => l.trim());
                 if (valid.length === 0) {
-                    setError('Enter at least one link');
+                    setError('Enter at least one YouTube link');
                     return;
                 }
 
@@ -36,40 +73,75 @@
                 setLoading(true);
 
                 try {
-                    const transcripts = valid.map((l, i) => 
-                        `VIDEO ${i+1}: ${l}\n\nDemo transcript for video analysis...`
+                    const transcripts = [];
+
+                    for (let i = 0; i < valid.length; i++) {
+                        setProgress(`📥 Fetching transcript ${i + 1} of ${valid.length}...`);
+                        const videoId = extractVideoId(valid[i]);
+                        if (!videoId) throw new Error(`Invalid YouTube URL: ${valid[i]}`);
+                        const transcript = await fetchTranscript(videoId);
+                        transcripts.push({ url: valid[i], videoId, transcript });
+                    }
+
+                    setProgress('🤖 Analyzing with Claude AI...');
+
+                    const transcriptText = transcripts.map((t, i) => 
+                        `VIDEO ${i + 1}: ${t.url}\n\nTRANSCRIPT:\n${t.transcript}`
                     ).join('\n\n---\n\n');
 
-                    const prompt = valid.length === 1
-                        ? `Analyze this YouTube video:\n\n## Key Insights\n## Actionable Takeaways\n## Best Quotes\n\n${transcripts}`
-                        : `Compare these ${valid.length} YouTube videos:\n\n## Consensus Views\n## Unique Perspectives\n## Comparative Analysis\n## Best Practices\n\n${transcripts}`;
+                    const prompt = transcripts.length === 1
+                        ? `Analyze this YouTube video transcript and provide:
 
-                    const response = await fetch('/.netlify/functions/analyze', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            messages: [{ role: 'user', content: prompt }]
-                        })
-                    });
+## Key Insights
+- Main concepts, strategies and lessons
+- Specific examples and data points mentioned
+- Unique or surprising perspectives
 
-                    const data = await response.json();
-if (data.error) {
-    throw new Error(data.error.message || data.error);
-}
-if (!data.content || !data.content[0]) {
-    throw new Error('Invalid API response: ' + JSON.stringify(data));
-}
-setResults(data.content[0].text);
+## Actionable Takeaways
+- What viewers can implement immediately
+- Step-by-step processes mentioned
+- Tools or frameworks discussed
+
+## Best Quotes
+- Most impactful quotes with context
+
+TRANSCRIPT:
+${transcriptText}`
+                        : `Compare and synthesize these ${transcripts.length} YouTube videos:
+
+## Consensus Views
+- What all videos agree on
+- Common themes and strategies
+
+## Unique Perspectives
+- What each video uniquely offers
+- Contradicting viewpoints
+
+## Comparative Analysis
+- Which video excels in what areas
+- How they complement each other
+
+## Synthesized Best Practices
+- Combined wisdom from all sources
+- Recommended viewing order
+
+TRANSCRIPTS:
+${transcriptText}`;
+
+                    const analysis = await analyzeWithClaude(prompt);
+                    setResults(analysis);
+
                 } catch (err) {
                     setError(err.message);
                 } finally {
                     setLoading(false);
+                    setProgress('');
                 }
             };
 
             const searchAndAnalyze = async () => {
                 if (!topic.trim()) {
-                    setError('Enter a topic');
+                    setError('Enter a topic or video title');
                     return;
                 }
 
@@ -78,52 +150,49 @@ setResults(data.content[0].text);
                 setLoading(true);
 
                 try {
-                    const mockData = {
+                    setProgress(`🔍 Searching for videos on "${topic}"...`);
+
+                    const mockVideos = {
                         'trading psychology': [
-                            { title: 'Mark Douglas - Psychology Mastery', content: 'Accept uncertainty, probability mindset...' },
-                            { title: 'Daily Trading Routine', content: 'Morning journal, meditation, risk management...' },
-                            { title: 'FOMO & Revenge Trading', content: 'Break emotional cycles, position sizing...' }
-                        ],
-                        'avaloq migration': [
-                            { title: 'Avaloq Best Practices', content: 'Data mapping foundation, timeline 18-24 months...' },
-                            { title: 'RBC Case Study', content: 'Legacy consolidation, regulatory compliance...' },
-                            { title: 'Avaloq vs FNZ', content: 'Platform comparison, cost analysis...' }
+                            'dQw4w9WgXcQ',
+                            'dQw4w9WgXcQ',
+                            'dQw4w9WgXcQ'
                         ]
                     };
 
-                    const videos = (mockData[topic.toLowerCase()] || [
-                        { title: `${topic} - Video 1`, content: 'Key insights...' },
-                        { title: `${topic} - Video 2`, content: 'Expert analysis...' }
-                    ]).slice(0, count);
+                    const prompt = `I want to learn about "${topic}". Based on your knowledge, provide a comprehensive analysis as if you had watched ${count} expert videos on this topic:
 
-                    const transcripts = videos.map((v, i) => 
-                        `VIDEO ${i+1}: "${v.title}"\n\n${v.content}`
-                    ).join('\n\n---\n\n');
+## Consensus Views
+- What most experts agree on about ${topic}
+- Common strategies and principles
 
-                    const prompt = count === 1
-                        ? `Analyze this video on "${topic}":\n\n## Key Insights\n## Actionable Takeaways\n\n${transcripts}`
-                        : `Compare ${count} videos on "${topic}":\n\n## Consensus Views\n## Unique Perspectives\n## Best Practices\n\n${transcripts}`;
+## Key Insights
+- Most important concepts to understand
+- Critical success factors
 
-                    const response = await fetch('/.netlify/functions/analyze', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            messages: [{ role: 'user', content: prompt }]
-                        })
-                    });
+## Unique Perspectives
+- Different schools of thought
+- Contrasting approaches
 
-                    const data = await response.json();
-if (data.error) {
-    throw new Error(data.error.message || data.error);
-}
-if (!data.content || !data.content[0]) {
-    throw new Error('Invalid API response: ' + JSON.stringify(data));
-}
-setResults(data.content[0].text);
+## Actionable Synthesis
+- Step-by-step best practices
+- What to implement first
+
+## Recommended Resources
+- Types of videos/content to look for
+- Key experts or channels to follow
+
+Please be specific, detailed and practical.`;
+
+                    setProgress('🤖 Analyzing with Claude AI...');
+                    const analysis = await analyzeWithClaude(prompt);
+                    setResults(analysis);
+
                 } catch (err) {
                     setError(err.message);
                 } finally {
                     setLoading(false);
+                    setProgress('');
                 }
             };
 
@@ -133,83 +202,92 @@ setResults(data.content[0].text);
                         <h1 className="text-5xl font-bold text-center mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                             YouTube Insights Analyzer
                         </h1>
-                        <p className="text-center text-gray-300 mb-8">Compare videos or search by topic</p>
+                        <p className="text-center text-gray-300 mb-8">
+                            Paste YouTube links for real transcript analysis
+                        </p>
 
                         <div className="flex gap-4 mb-8">
                             <button onClick={() => setMode('links')}
                                 className={`flex-1 py-4 px-6 rounded-xl font-semibold transition ${
                                     mode === 'links' 
                                     ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105' 
-                                    : 'bg-slate-800/50 border border-purple-500/20 hover:border-purple-500/40'
+                                    : 'bg-slate-800/50 border border-purple-500/20'
                                 }`}>
                                 <div className="text-3xl mb-2">🔗</div>
                                 <div>Paste YouTube Links</div>
-                                <div className="text-xs text-gray-400 mt-1">1-5 links</div>
+                                <div className="text-xs text-gray-400 mt-1">Auto-fetches real transcripts (1-5 links)</div>
                             </button>
                             <button onClick={() => setMode('search')}
                                 className={`flex-1 py-4 px-6 rounded-xl font-semibold transition ${
                                     mode === 'search' 
                                     ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105' 
-                                    : 'bg-slate-800/50 border border-purple-500/20 hover:border-purple-500/40'
+                                    : 'bg-slate-800/50 border border-purple-500/20'
                                 }`}>
                                 <div className="text-3xl mb-2">🔍</div>
                                 <div>Search by Topic</div>
-                                <div className="text-xs text-gray-400 mt-1">1-3 videos</div>
+                                <div className="text-xs text-gray-400 mt-1">AI knowledge synthesis (1-3 topics)</div>
                             </button>
                         </div>
 
                         {mode === 'links' && (
                             <div className="bg-slate-800/50 rounded-2xl p-8 mb-8 border border-purple-500/20">
-                                <h2 className="text-xl font-bold text-purple-300 mb-4">Paste YouTube Links (1-5)</h2>
+                                <h2 className="text-xl font-bold text-purple-300 mb-2">
+                                    Paste YouTube Links
+                                </h2>
+                                <p className="text-sm text-gray-400 mb-6">
+                                    Enter 1-5 YouTube URLs. Transcripts will be automatically fetched and analyzed.
+                                </p>
                                 {links.map((l, i) => (
                                     <div key={i} className="flex gap-3 mb-3">
-                                        <span className="text-purple-400 w-8">{i+1}.</span>
+                                        <span className="text-purple-400 font-bold w-8 pt-3">{i+1}.</span>
                                         <input type="text" value={l} 
                                             onChange={e => setLinks(links.map((link, idx) => idx === i ? e.target.value : link))}
                                             placeholder="https://youtube.com/watch?v=..."
-                                            className="flex-1 px-4 py-3 bg-slate-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500" />
+                                            className="flex-1 px-4 py-3 bg-slate-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500" />
                                     </div>
                                 ))}
                                 <button onClick={analyzeLinks} disabled={loading}
-                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold mt-4">
-                                    {loading ? 'Analyzing...' : 'Analyze Videos'}
+                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold mt-4 transition">
+                                    {loading ? 'Analyzing...' : `Analyze ${links.filter(l => l.trim()).length || ''} Video${links.filter(l => l.trim()).length !== 1 ? 's' : ''}`}
                                 </button>
                             </div>
                         )}
 
                         {mode === 'search' && (
                             <div className="bg-slate-800/50 rounded-2xl p-8 mb-8 border border-purple-500/20">
-                                <h2 className="text-xl font-bold text-purple-300 mb-4">Search YouTube by Topic</h2>
+                                <h2 className="text-xl font-bold text-purple-300 mb-2">
+                                    Search by Topic
+                                </h2>
+                                <p className="text-sm text-gray-400 mb-6">
+                                    Enter any topic and Claude will synthesize expert knowledge on it.
+                                </p>
                                 <input type="text" value={topic} onChange={e => setTopic(e.target.value)}
-                                    placeholder="e.g., 'trading psychology', 'Avaloq migration'"
-                                    className="w-full px-4 py-3 bg-slate-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 mb-4" />
-                                <div className="mb-4">
-                                    <label className="block text-sm mb-2 text-purple-300">Number of videos</label>
+                                    placeholder="e.g., 'trading psychology', 'Avaloq migration', 'startup fundraising'"
+                                    className="w-full px-4 py-3 bg-slate-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                                <div className="mb-6">
+                                    <label className="block text-sm mb-2 text-purple-300">Depth of analysis</label>
                                     <div className="flex gap-3">
-                                        {[1,2,3].map(n => (
+                                        {[1, 2, 3].map(n => (
                                             <button key={n} onClick={() => setCount(n)}
-                                                className={`flex-1 py-3 rounded-lg font-semibold ${
+                                                className={`flex-1 py-3 rounded-lg font-semibold transition ${
                                                     count === n ? 'bg-purple-600' : 'bg-slate-700/50 hover:bg-slate-700'
                                                 }`}>
-                                                {n} video{n > 1 ? 's' : ''}
+                                                {n === 1 ? 'Quick' : n === 2 ? 'Detailed' : 'Deep Dive'}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
-                                <div className="mb-4 p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-                                    <p className="text-xs text-gray-300">💡 Try: "trading psychology" or "Avaloq migration"</p>
-                                </div>
                                 <button onClick={searchAndAnalyze} disabled={loading}
-                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold">
-                                    {loading ? 'Analyzing...' : `Find & Analyze ${count} Video${count > 1 ? 's' : ''}`}
+                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold transition">
+                                    {loading ? 'Analyzing...' : 'Analyze Topic'}
                                 </button>
                             </div>
                         )}
 
                         {loading && (
                             <div className="bg-slate-800/50 rounded-2xl p-8 mb-8 text-center border border-purple-500/20">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                                <p className="text-purple-300">Analyzing with Claude AI...</p>
+                                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500 mx-auto mb-4"></div>
+                                <p className="text-purple-300 font-medium">{progress || 'Processing...'}</p>
                             </div>
                         )}
 
@@ -223,10 +301,10 @@ setResults(data.content[0].text);
                         {results && (
                             <div className="bg-slate-800/50 rounded-2xl p-8 border border-purple-500/20">
                                 <div className="flex justify-between mb-6">
-                                    <h2 className="text-2xl font-bold text-purple-300">📊 Results</h2>
+                                    <h2 className="text-2xl font-bold text-purple-300">📊 Analysis Results</h2>
                                     <button onClick={() => navigator.clipboard.writeText(results)}
-                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm">
-                                        Copy
+                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm transition">
+                                        Copy Results
                                     </button>
                                 </div>
                                 <pre className="whitespace-pre-wrap text-gray-200 text-sm leading-relaxed">{results}</pre>
