@@ -38,7 +38,7 @@
             };
 
             const fetchTranscript = async (videoId) => {
-                const response = await fetch('/.netlify/functions/transcript', {
+                const response = await fetch('/api/transcript', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ videoId })
@@ -49,7 +49,7 @@
             };
 
             const analyzeWithClaude = async (prompt) => {
-                const response = await fetch('/.netlify/functions/analyze', {
+                const response = await fetch('/api/analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
