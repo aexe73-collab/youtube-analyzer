@@ -1,5 +1,3 @@
-const { YoutubeTranscript } = require('youtube-transcript');
-
 exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -12,6 +10,9 @@ exports.handler = async (event) => {
   }
 
   try {
+    // Lazy load the module
+    const { YoutubeTranscript } = await import('youtube-transcript');
+    
     const { videoId } = JSON.parse(event.body);
 
     if (!videoId) {
@@ -22,6 +23,8 @@ exports.handler = async (event) => {
       };
     }
 
+    console.log('Fetching transcript for:', videoId);
+    
     const transcript = await YoutubeTranscript.fetchTranscript(videoId);
     
     const fullText = transcript
@@ -29,6 +32,8 @@ exports.handler = async (event) => {
       .join(' ')
       .replace(/\[.*?\]/g, '')
       .trim();
+
+    console.log('Transcript fetched successfully, length:', fullText.length);
 
     return {
       statusCode: 200,
@@ -40,12 +45,15 @@ exports.handler = async (event) => {
     };
 
   } catch (error) {
+    console.error('Transcript error:', error);
+    
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({ 
         error: 'Could not fetch transcript',
-        message: error.message 
+        message: error.message,
+        details: error.toString()
       })
     };
   }
