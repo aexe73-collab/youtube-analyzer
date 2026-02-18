@@ -21,22 +21,18 @@ export default async function handler(req, res) {
 
     console.log('Fetching transcript via SerpAPI for:', videoId);
 
-    // Build SerpAPI request URL
     const params = new URLSearchParams({
       engine: 'youtube_video_transcript',
       v: videoId,
       api_key: apiKey,
-      lang: 'en'  // English transcripts
+      lang: 'en'
     });
 
-    const apiUrl = `https://serpapi.com/search.json?${params.toString()}`;
+    const apiUrl = 'https://serpapi.com/search.json?' + params.toString();
     
     const response = await fetch(apiUrl);
     const data = await response.json();
 
-    console.log('SerpAPI response:', JSON.stringify(data).substring(0, 200));
-
-    // Check for errors
     if (data.error) {
       throw new Error(data.error);
     }
@@ -45,7 +41,6 @@ export default async function handler(req, res) {
       throw new Error('No transcript available for this video');
     }
 
-    // Combine all transcript segments
     const transcript = data.transcript
       .map(segment => segment.text)
       .join(' ')
@@ -59,8 +54,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ 
       transcript: transcript,
-      length: transcript.length,
-      segments: data.transcript.length
+      length: transcript.length
     });
 
   } catch (error) {
@@ -71,18 +65,3 @@ export default async function handler(req, res) {
     });
   }
 }
-```
-
-### **Step 4: Commit and Deploy**
-
-1. Commit the updated `api/transcript.js` to GitHub
-2. Vercel auto-deploys
-3. Wait 1-2 minutes
-
----
-
-## **Test It:**
-
-After deployment, try analyzing this video (I know it has captions):
-```
-https://www.youtube.com/watch?v=jNQXAC9IVRw
