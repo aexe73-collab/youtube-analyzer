@@ -13,7 +13,7 @@ const analyzeLinks = async () => {
         const transcripts = [];
 
         for (let i = 0; i < valid.length; i++) {
-            setProgress(`📥 Fetching video ${i + 1} of ${valid.length}...`);
+            setProgress(`📥 Fetching transcript ${i + 1} of ${valid.length}...`);
             const videoId = extractVideoId(valid[i]);
             
             if (!videoId) {
@@ -27,29 +27,11 @@ const analyzeLinks = async () => {
             }
             
             try {
-                // Fetch video metadata
-                const metadataResponse = await fetch(
-                    `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=AIzaSyDummyKeyReplaceLater`
-                );
-                const metadataData = await metadataResponse.json();
-                
-                let title = 'Unknown Title';
-                let channel = 'Unknown Channel';
-                
-                if (metadataData.items && metadataData.items.length > 0) {
-                    title = metadataData.items[0].snippet.title;
-                    channel = metadataData.items[0].snippet.channelTitle;
-                }
-                
-                // Fetch transcript
                 const transcript = await fetchTranscript(videoId);
-                
                 transcripts.push({ 
                     url: valid[i], 
                     videoId, 
-                    transcript,
-                    title,
-                    channel
+                    transcript
                 });
             } catch (transcriptError) {
                 throw new Error(
@@ -72,21 +54,19 @@ const analyzeLinks = async () => {
 
         setProgress('🤖 Analyzing with Claude AI...');
 
-        // Build report header
+        // Build report header with video links
         const reportHeader = transcripts.map((t, i) => 
-            `## Video ${i + 1}\n` +
-            `**Title:** ${t.title}\n` +
-            `**Channel:** ${t.channel}\n` +
-            `**Link:** ${t.url}\n`
+            `**Video ${i + 1}:** ${t.url}`
         ).join('\n');
 
         const transcriptText = transcripts.map((t, i) => 
-            `### VIDEO ${i + 1} TRANSCRIPT:\n${t.transcript}`
+            `VIDEO ${i + 1}: ${t.url}\n\nTRANSCRIPT:\n${t.transcript}`
         ).join('\n\n---\n\n');
 
         const prompt = transcripts.length === 1
             ? `You are analyzing a YouTube video. Create a professional insights report.
 
+VIDEO ANALYZED:
 ${reportHeader}
 
 ---
@@ -106,11 +86,11 @@ Based on the transcript, provide:
 ## Best Quotes
 - Most impactful quotes with context
 
----
-
+TRANSCRIPT:
 ${transcriptText}`
             : `You are analyzing multiple YouTube videos. Create a professional comparative insights report.
 
+VIDEOS ANALYZED:
 ${reportHeader}
 
 ---
@@ -133,14 +113,13 @@ Based on the transcripts, provide:
 - Combined wisdom from all sources
 - Recommended viewing order
 
----
-
+TRANSCRIPTS:
 ${transcriptText}`;
 
         const analysis = await analyzeWithClaude(prompt);
         
-        // Prepend the header to results
-        const formattedResults = `# YouTube Insights Report\n\n${reportHeader}\n---\n\n${analysis}`;
+        // Prepend the video links to results
+        const formattedResults = `# YouTube Insights Report\n\n${reportHeader}\n\n---\n\n${analysis}`;
         setResults(formattedResults);
 
     } catch (err) {
@@ -152,37 +131,23 @@ ${transcriptText}`;
 };
 ```
 
-4. Commit
+5. Commit
 
 ---
 
-## **Wait - You Need to Add YouTube API Key!**
+**This version:**
+- ✅ Shows the YouTube URL at the top of the report
+- ✅ No external API calls needed (just SerpAPI for transcript)
+- ✅ Works immediately
+- ✅ Professional report format
 
-You already have a YouTube API key from earlier. Add it to Vercel:
-
-1. Vercel → Settings → Environment Variables
-2. Add (if not already there):
-   - **Key**: `YOUTUBE_API_KEY`
-   - **Value**: Your Google API key (starts with `AIza...`)
-   - Check all environments
-3. Save
-4. **Redeploy**
-
----
-
-**After deployment, the output will look like:**
+**Output will look like:**
 ```
 # YouTube Insights Report
 
-## Video 1
-**Title:** "How to Build a Million Dollar Business"
-**Channel:** My First Million
-**Link:** https://youtube.com/watch?v=...
+**Video 1:** https://youtube.com/watch?v=...
 
 ---
 
 ## Key Insights
-- [Analysis here]
-
-## Actionable Takeaways
-- [Analysis here]
+[Analysis here]
