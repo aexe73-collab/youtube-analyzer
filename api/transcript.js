@@ -50,7 +50,7 @@ export default async function handler(req, res) {
     console.log('First segment:', JSON.stringify(data.transcript[0], null, 2));
 
     const transcript = data.transcript
-      .map(segment => segment.text)
+    .map(segment => segment.snippet) 
       .join(' ')
       .trim();
 
