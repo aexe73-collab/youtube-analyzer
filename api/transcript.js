@@ -33,6 +33,11 @@ export default async function handler(req, res) {
     const response = await fetch(apiUrl);
     const data = await response.json();
 
+    // DEBUG: Log the full response
+    console.log('SerpAPI full response:', JSON.stringify(data, null, 2));
+    console.log('Has transcript?', !!data.transcript);
+    console.log('Transcript length:', data.transcript ? data.transcript.length : 0);
+
     if (data.error) {
       throw new Error(data.error);
     }
@@ -41,13 +46,19 @@ export default async function handler(req, res) {
       throw new Error('No transcript available for this video');
     }
 
+    // DEBUG: Log first segment
+    console.log('First segment:', JSON.stringify(data.transcript[0], null, 2));
+
     const transcript = data.transcript
       .map(segment => segment.text)
       .join(' ')
       .trim();
 
+    console.log('Combined transcript preview:', transcript.substring(0, 200));
+    console.log('Final transcript length:', transcript.length);
+
     if (!transcript || transcript.length < 100) {
-      throw new Error('Transcript too short or empty');
+      throw new Error(`Transcript too short: ${transcript.length} chars. Preview: ${transcript.substring(0, 100)}`);
     }
 
     console.log('Transcript fetched successfully, length:', transcript.length);
