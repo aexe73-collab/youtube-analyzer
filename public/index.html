@@ -1,57 +1,116 @@
-const analyzeLinks = async () => {
-    const valid = links.filter(l => l.trim());
-    if (valid.length === 0) {
-        setError('Please enter at least one YouTube link');
-        return;
-    }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Insights Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 min-h-screen text-white">
+    <div id="root"></div>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="text/babel">
+        const { useState } = React;
 
-    setError('');
-    setResults('');
-    setLoading(true);
+        function App() {
+            const [mode, setMode] = useState('links');
+            const [links, setLinks] = useState(['', '', '', '', '']);
+            const [topic, setTopic] = useState('');
+            const [count, setCount] = useState(2);
+            const [results, setResults] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const [progress, setProgress] = useState('');
 
-    try {
-        const transcripts = [];
+            const extractVideoId = (url) => {
+                const patterns = [
+                    /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/,
+                    /^([a-zA-Z0-9_-]{11})$/
+                ];
+                for (const pattern of patterns) {
+                    const match = url.match(pattern);
+                    if (match) return match[1];
+                }
+                return null;
+            };
 
-        for (let i = 0; i < valid.length; i++) {
-            setProgress(`📥 Fetching video ${i + 1} of ${valid.length}...`);
-            const videoId = extractVideoId(valid[i]);
-            
-            if (!videoId) {
-                throw new Error(`Invalid YouTube URL: ${valid[i]}`);
-            }
-            
-            // Fetch video metadata (title & channel)
-            let title = 'Unknown Title';
-            let channel = 'Unknown Channel';
-            
-            try {
-                const metadataResponse = await fetch(
-                    `/api/metadata?videoId=${videoId}`
-                );
-                const metadata = await metadataResponse.json();
-                if (metadata.title) title = metadata.title;
-                if (metadata.channel) channel = metadata.channel;
-            } catch (err) {
-                console.log('Could not fetch metadata, using defaults');
-            }
-            
-            // Fetch transcript
-            const transcript = await fetchTranscript(videoId);
-            transcripts.push({ url: valid[i], videoId, transcript, title, channel });
-        }
+            const fetchTranscript = async (videoId) => {
+                const response = await fetch('/api/transcript', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ videoId })
+                });
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                return data.transcript;
+            };
 
-        setProgress('🤖 Analyzing with Claude AI...');
+            const analyzeWithClaude = async (prompt) => {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [{ role: 'user', content: prompt }]
+                    })
+                });
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+                return data.content[0].text;
+            };
 
-        const reportHeader = transcripts.map((t, i) => 
-            `## Video ${i + 1}\n**Title:** ${t.title}\n**Channel:** ${t.channel}\n**Link:** ${t.url}`
-        ).join('\n\n');
+            const analyzeLinks = async () => {
+                const valid = links.filter(l => l.trim());
+                if (valid.length === 0) {
+                    setError('Please enter at least one YouTube link');
+                    return;
+                }
 
-        const transcriptText = transcripts.map((t, i) => 
-            `VIDEO ${i + 1}: ${t.url}\n\nTRANSCRIPT:\n${t.transcript}`
-        ).join('\n\n---\n\n');
+                setError('');
+                setResults('');
+                setLoading(true);
 
-        const prompt = transcripts.length === 1
-            ? `You are analyzing a YouTube video. Create a professional insights report.
+                try {
+                    const transcripts = [];
+
+                    for (let i = 0; i < valid.length; i++) {
+                        setProgress(`📥 Fetching video ${i + 1} of ${valid.length}...`);
+                        const videoId = extractVideoId(valid[i]);
+                        
+                        if (!videoId) {
+                            throw new Error(`Invalid YouTube URL: ${valid[i]}`);
+                        }
+                        
+                        let title = 'Video Title';
+                        let channel = 'Channel Name';
+                        
+                        try {
+                            const metadataResponse = await fetch(`/api/metadata?videoId=${videoId}`);
+                            const metadata = await metadataResponse.json();
+                            if (metadata.title) title = metadata.title;
+                            if (metadata.channel) channel = metadata.channel;
+                        } catch (err) {
+                            console.log('Could not fetch metadata');
+                        }
+                        
+                        const transcript = await fetchTranscript(videoId);
+                        transcripts.push({ url: valid[i], videoId, transcript, title, channel });
+                    }
+
+                    setProgress('🤖 Analyzing with Claude AI...');
+
+                    const reportHeader = transcripts.map((t, i) => 
+                        `## Video ${i + 1}\n**Title:** ${t.title}\n**Channel:** ${t.channel}\n**Link:** ${t.url}`
+                    ).join('\n\n');
+
+                    const transcriptText = transcripts.map((t, i) => 
+                        `VIDEO ${i + 1}: ${t.url}\n\nTRANSCRIPT:\n${t.transcript}`
+                    ).join('\n\n---\n\n');
+
+                    const prompt = transcripts.length === 1
+                        ? `You are analyzing a YouTube video. Create a professional insights report.
 
 ${reportHeader}
 
@@ -74,7 +133,7 @@ Based on the transcript, provide:
 
 TRANSCRIPT:
 ${transcriptText}`
-            : `You are analyzing multiple YouTube videos. Create a professional comparative insights report.
+                        : `You are analyzing multiple YouTube videos. Create a professional comparative insights report.
 
 ${reportHeader}
 
@@ -101,14 +160,213 @@ Based on the transcripts, provide:
 TRANSCRIPTS:
 ${transcriptText}`;
 
-        const analysis = await analyzeWithClaude(prompt);
-        const formattedResults = `# YouTube Insights Report\n\n${reportHeader}\n\n---\n\n${analysis}`;
-        setResults(formattedResults);
+                    const analysis = await analyzeWithClaude(prompt);
+                    const formattedResults = `# YouTube Insights Report\n\n${reportHeader}\n\n---\n\n${analysis}`;
+                    setResults(formattedResults);
 
-    } catch (err) {
-        setError(err.message);
-    } finally {
-        setLoading(false);
-        setProgress('');
-    }
-};
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                    setProgress('');
+                }
+            };
+
+            const searchAndAnalyze = async () => {
+                if (!topic.trim()) {
+                    setError('Please enter a topic or video title');
+                    return;
+                }
+
+                setError('');
+                setResults('');
+                setLoading(true);
+
+                try {
+                    setProgress(`🔍 Analyzing topic: "${topic}"...`);
+
+                    const prompt = `I want to learn about "${topic}". Based on your knowledge, provide a comprehensive analysis as if you had watched ${count} expert videos on this topic:
+
+## Consensus Views
+- What most experts agree on about ${topic}
+- Common strategies and principles
+
+## Key Insights
+- Most important concepts to understand
+- Critical success factors
+- Common mistakes to avoid
+
+## Unique Perspectives
+- Different schools of thought
+- Contrasting approaches
+- Innovative ideas in this space
+
+## Actionable Synthesis
+- Step-by-step best practices
+- What to implement first
+- Quick wins vs long-term strategies
+
+## Recommended Resources
+- Types of videos/content to look for
+- Key experts or channels to follow
+- Books or courses worth exploring
+
+Please be specific, detailed and practical. Focus on actionable insights.`;
+
+                    setProgress('🤖 Synthesizing insights with Claude AI...');
+                    const analysis = await analyzeWithClaude(prompt);
+                    setResults(analysis);
+
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                    setProgress('');
+                }
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8">
+                    <div className="max-w-5xl mx-auto">
+                        <h1 className="text-4xl md:text-5xl font-bold text-center mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                            YouTube Insights Analyzer
+                        </h1>
+                        <p className="text-center text-gray-300 mb-8">
+                            Extract insights from YouTube videos with AI
+                        </p>
+
+                        <div className="flex gap-4 mb-8">
+                            <button onClick={() => setMode('links')}
+                                className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${
+                                    mode === 'links' 
+                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105 shadow-lg' 
+                                    : 'bg-slate-800/50 border border-purple-500/20 hover:border-purple-500/40'
+                                }`}>
+                                <div className="text-3xl mb-2">🔗</div>
+                                <div className="font-bold">Paste YouTube Links</div>
+                                <div className="text-xs text-gray-400 mt-1">Auto-fetch transcripts (1-5 links)</div>
+                            </button>
+                            <button onClick={() => setMode('search')}
+                                className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${
+                                    mode === 'search' 
+                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105 shadow-lg' 
+                                    : 'bg-slate-800/50 border border-purple-500/20 hover:border-purple-500/40'
+                                }`}>
+                                <div className="text-3xl mb-2">🔍</div>
+                                <div className="font-bold">Search by Topic</div>
+                                <div className="text-xs text-gray-400 mt-1">AI knowledge synthesis</div>
+                            </button>
+                        </div>
+
+                        {mode === 'links' && (
+                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 md:p-8 mb-8 border border-purple-500/20">
+                                <h2 className="text-xl font-bold text-purple-300 mb-2">
+                                    Paste YouTube Links
+                                </h2>
+                                <p className="text-sm text-gray-400 mb-6">
+                                    Enter 1-5 YouTube URLs. Transcripts will be automatically fetched and analyzed.
+                                </p>
+
+                                <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                                    <p className="text-sm text-blue-200 font-semibold mb-2">💡 Important: Videos must have captions</p>
+                                    <p className="text-xs text-gray-300">
+                                        Before analyzing, check that your video has the <strong>CC (closed captions)</strong> button on YouTube.
+                                        Videos without captions cannot be analyzed.
+                                    </p>
+                                </div>
+
+                                {links.map((l, i) => (
+                                    <div key={i} className="flex gap-3 mb-3">
+                                        <span className="text-purple-400 font-bold w-8 pt-3">{i+1}.</span>
+                                        <input type="text" value={l} 
+                                            onChange={e => setLinks(links.map((link, idx) => idx === i ? e.target.value : link))}
+                                            placeholder="https://youtube.com/watch?v=..."
+                                            className="flex-1 px-4 py-3 bg-slate-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                                    </div>
+                                ))}
+                                
+                                <button onClick={analyzeLinks} disabled={loading}
+                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold mt-4 transition-all shadow-lg">
+                                    {loading ? 'Analyzing...' : `Analyze ${links.filter(l => l.trim()).length || ''} Video${links.filter(l => l.trim()).length !== 1 ? 's' : ''}`}
+                                </button>
+                            </div>
+                        )}
+
+                        {mode === 'search' && (
+                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 md:p-8 mb-8 border border-purple-500/20">
+                                <h2 className="text-xl font-bold text-purple-300 mb-2">
+                                    Search by Topic
+                                </h2>
+                                <p className="text-sm text-gray-400 mb-6">
+                                    Enter any topic and Claude will synthesize expert knowledge on it.
+                                </p>
+                                
+                                <input type="text" value={topic} onChange={e => setTopic(e.target.value)}
+                                    placeholder="e.g., 'trading psychology', 'Avaloq migration', 'startup fundraising'"
+                                    className="w-full px-4 py-3 bg-slate-900/50 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 mb-6 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                                
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium mb-3 text-purple-300">Depth of analysis</label>
+                                    <div className="flex gap-3">
+                                        {[1, 2, 3].map(n => (
+                                            <button key={n} onClick={() => setCount(n)}
+                                                className={`flex-1 py-3 rounded-lg font-semibold transition-all ${
+                                                    count === n ? 'bg-purple-600 shadow-lg' : 'bg-slate-700/50 hover:bg-slate-700'
+                                                }`}>
+                                                {n === 1 ? 'Quick' : n === 2 ? 'Detailed' : 'Deep Dive'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                
+                                <button onClick={searchAndAnalyze} disabled={loading}
+                                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 py-4 rounded-lg font-semibold transition-all shadow-lg">
+                                    {loading ? 'Analyzing...' : 'Analyze Topic'}
+                                </button>
+                            </div>
+                        )}
+
+                        {loading && (
+                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 mb-8 text-center border border-purple-500/20">
+                                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500 mx-auto mb-4"></div>
+                                <p className="text-purple-300 font-medium text-lg">{progress || 'Processing...'}</p>
+                            </div>
+                        )}
+
+                        {error && (
+                            <div className="bg-red-900/30 backdrop-blur rounded-2xl p-6 mb-8 border border-red-500/30">
+                                <h3 className="font-semibold text-red-300 mb-3 text-lg">⚠️ Error</h3>
+                                <pre className="text-red-200 text-sm whitespace-pre-wrap font-sans">{error}</pre>
+                            </div>
+                        )}
+
+                        {results && (
+                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 md:p-8 border border-purple-500/20">
+                                <div className="flex justify-between items-start mb-6">
+                                    <h2 className="text-2xl md:text-3xl font-bold text-purple-300">📊 Analysis Results</h2>
+                                    <button onClick={() => {
+                                        navigator.clipboard.writeText(results);
+                                        const btn = document.getElementById('copyBtn');
+                                        if (btn) {
+                                            const original = btn.textContent;
+                                            btn.textContent = '✓ Copied!';
+                                            setTimeout(() => btn.textContent = original, 2000);
+                                        }
+                                    }}
+                                    id="copyBtn"
+                                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-all">
+                                        Copy Results
+                                    </button>
+                                </div>
+                                <pre className="whitespace-pre-wrap text-gray-200 text-sm md:text-base leading-relaxed font-sans">{results}</pre>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
