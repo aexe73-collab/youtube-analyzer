@@ -76,21 +76,25 @@
                     const transcripts = [];
 
                     for (let i = 0; i < valid.length; i++) {
-                        setProgress(`📥 Fetching video ${i + 1} of ${valid.length}...`);
+                        setProgress(`Fetching video ${i + 1} of ${valid.length}...`);
                         const videoId = extractVideoId(valid[i]);
                         
                         if (!videoId) {
                             throw new Error(`Invalid YouTube URL: ${valid[i]}`);
                         }
                         
-                        let title = 'Video Title';
-                        let channel = 'Channel Name';
+                        let title = '';
+                        let channel = '';
                         
                         try {
                             const metadataResponse = await fetch(`/api/metadata?videoId=${videoId}`);
                             const metadata = await metadataResponse.json();
-                            if (metadata.title) title = metadata.title;
-                            if (metadata.channel) channel = metadata.channel;
+                            if (metadata.title && !metadata.title.includes('Unavailable')) {
+                                title = metadata.title;
+                            }
+                            if (metadata.channel && !metadata.channel.includes('Unavailable')) {
+                                channel = metadata.channel;
+                            }
                         } catch (err) {
                             console.log('Could not fetch metadata');
                         }
@@ -99,11 +103,15 @@
                         transcripts.push({ url: valid[i], videoId, transcript, title, channel });
                     }
 
-                    setProgress('🤖 Analyzing with Claude AI...');
+                    setProgress('Analyzing with Claude AI...');
 
-                    const reportHeader = transcripts.map((t, i) => 
-                        `## Video ${i + 1}\n**Title:** ${t.title}\n**Channel:** ${t.channel}\n**Link:** ${t.url}`
-                    ).join('\n\n');
+                    const reportHeader = transcripts.map((t, i) => {
+                        let header = `## Video ${i + 1}\n`;
+                        if (t.title) header += `**Title:** ${t.title}\n`;
+                        if (t.channel) header += `**Channel:** ${t.channel}\n`;
+                        header += `**Link:** ${t.url}`;
+                        return header;
+                    }).join('\n\n');
 
                     const transcriptText = transcripts.map((t, i) => 
                         `VIDEO ${i + 1}: ${t.url}\n\nTRANSCRIPT:\n${t.transcript}`
@@ -183,7 +191,7 @@ ${transcriptText}`;
                 setLoading(true);
 
                 try {
-                    setProgress(`🔍 Analyzing topic: "${topic}"...`);
+                    setProgress(`Analyzing topic: "${topic}"...`);
 
                     const prompt = `I want to learn about "${topic}". Based on your knowledge, provide a comprehensive analysis as if you had watched ${count} expert videos on this topic:
 
@@ -213,7 +221,7 @@ ${transcriptText}`;
 
 Please be specific, detailed and practical. Focus on actionable insights.`;
 
-                    setProgress('🤖 Synthesizing insights with Claude AI...');
+                    setProgress('Synthesizing insights with Claude AI...');
                     const analysis = await analyzeWithClaude(prompt);
                     setResults(analysis);
 
@@ -235,31 +243,29 @@ Please be specific, detailed and practical. Focus on actionable insights.`;
                             Extract insights from YouTube videos with AI
                         </p>
 
-                        <div className="flex gap-4 mb-8">
+                        <div className="flex gap-0 mb-0">
                             <button onClick={() => setMode('links')}
-                                className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${
+                                className={`flex-1 py-4 px-6 font-semibold transition-all ${
                                     mode === 'links' 
-                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105 shadow-lg' 
-                                    : 'bg-slate-800/50 border border-purple-500/20 hover:border-purple-500/40'
+                                    ? 'bg-slate-800/50 border-t border-l border-r border-purple-500/20 rounded-t-2xl' 
+                                    : 'bg-slate-900/30 border-b border-purple-500/10 text-gray-400 hover:text-white'
                                 }`}>
-                                <div className="text-3xl mb-2">🔗</div>
                                 <div className="font-bold">Paste YouTube Links</div>
-                                <div className="text-xs text-gray-400 mt-1">Auto-fetch transcripts (1-5 links)</div>
+                                <div className="text-xs mt-1 opacity-70">Auto-fetch transcripts</div>
                             </button>
                             <button onClick={() => setMode('search')}
-                                className={`flex-1 py-4 px-6 rounded-xl font-semibold transition-all ${
+                                className={`flex-1 py-4 px-6 font-semibold transition-all ${
                                     mode === 'search' 
-                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 scale-105 shadow-lg' 
-                                    : 'bg-slate-800/50 border border-purple-500/20 hover:border-purple-500/40'
+                                    ? 'bg-slate-800/50 border-t border-l border-r border-purple-500/20 rounded-t-2xl' 
+                                    : 'bg-slate-900/30 border-b border-purple-500/10 text-gray-400 hover:text-white'
                                 }`}>
-                                <div className="text-3xl mb-2">🔍</div>
                                 <div className="font-bold">Search by Topic</div>
-                                <div className="text-xs text-gray-400 mt-1">AI knowledge synthesis</div>
+                                <div className="text-xs mt-1 opacity-70">AI knowledge synthesis</div>
                             </button>
                         </div>
 
                         {mode === 'links' && (
-                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 md:p-8 mb-8 border border-purple-500/20">
+                            <div className="bg-slate-800/50 backdrop-blur rounded-b-2xl rounded-tr-2xl p-6 md:p-8 mb-8 border border-purple-500/20">
                                 <h2 className="text-xl font-bold text-purple-300 mb-2">
                                     Paste YouTube Links
                                 </h2>
@@ -268,9 +274,9 @@ Please be specific, detailed and practical. Focus on actionable insights.`;
                                 </p>
 
                                 <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                                    <p className="text-sm text-blue-200 font-semibold mb-2">💡 Important: Videos must have captions</p>
+                                    <p className="text-sm text-blue-200 font-semibold mb-2">Important: Videos must have captions</p>
                                     <p className="text-xs text-gray-300">
-                                        Before analyzing, check that your video has the <strong>CC (closed captions)</strong> button on YouTube.
+                                        Before analyzing, check that your video has the CC (closed captions) button on YouTube.
                                         Videos without captions cannot be analyzed.
                                     </p>
                                 </div>
@@ -293,7 +299,7 @@ Please be specific, detailed and practical. Focus on actionable insights.`;
                         )}
 
                         {mode === 'search' && (
-                            <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 md:p-8 mb-8 border border-purple-500/20">
+                            <div className="bg-slate-800/50 backdrop-blur rounded-b-2xl rounded-tl-2xl p-6 md:p-8 mb-8 border border-purple-500/20">
                                 <h2 className="text-xl font-bold text-purple-300 mb-2">
                                     Search by Topic
                                 </h2>
@@ -335,7 +341,7 @@ Please be specific, detailed and practical. Focus on actionable insights.`;
 
                         {error && (
                             <div className="bg-red-900/30 backdrop-blur rounded-2xl p-6 mb-8 border border-red-500/30">
-                                <h3 className="font-semibold text-red-300 mb-3 text-lg">⚠️ Error</h3>
+                                <h3 className="font-semibold text-red-300 mb-3 text-lg">Error</h3>
                                 <pre className="text-red-200 text-sm whitespace-pre-wrap font-sans">{error}</pre>
                             </div>
                         )}
@@ -343,13 +349,13 @@ Please be specific, detailed and practical. Focus on actionable insights.`;
                         {results && (
                             <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 md:p-8 border border-purple-500/20">
                                 <div className="flex justify-between items-start mb-6">
-                                    <h2 className="text-2xl md:text-3xl font-bold text-purple-300">📊 Analysis Results</h2>
+                                    <h2 className="text-2xl md:text-3xl font-bold text-purple-300">Analysis Results</h2>
                                     <button onClick={() => {
                                         navigator.clipboard.writeText(results);
                                         const btn = document.getElementById('copyBtn');
                                         if (btn) {
                                             const original = btn.textContent;
-                                            btn.textContent = '✓ Copied!';
+                                            btn.textContent = 'Copied!';
                                             setTimeout(() => btn.textContent = original, 2000);
                                         }
                                     }}
